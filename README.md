@@ -1,6 +1,11 @@
 # Music-Player-Android-Studio-Project
 
 
+**Build Gradle in Gradle Scripts folder**
+//I have imported dexter libraries in order to get permissions from the devices after installing the application.
+//Copy this line and paste it in the dependencies tag.
+implementation 'com.karumi:dexter:6.2.3'
+
 
 
 **MainActivity.java:**
@@ -163,12 +168,266 @@ public class MainActivity extends AppCompatActivity {
 
 
 **AndroidManifest.xml**
-//Make changes after the mainfest tag in order to ask the user to access the device storage
+//Make changes after the manifest tag in order to ask the user to access the device storage
 <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
 
-**activity_player.xml**
+
+
+
+**PlayerActivity.java**
 //Make another empty activity
+package com.example.musicplayer;
+
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
+import android.annotation.SuppressLint;
+import android.content.Intent;
+import android.graphics.PorterDuff;
+import android.media.MediaPlayer;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Handler;
+import android.provider.MediaStore;
+import android.view.MenuItem;
+import android.view.View;
+import android.widget.Button;
+import android.widget.ImageView;
+import android.widget.SeekBar;
+import android.widget.TextView;
+
+import java.io.File;
+import java.util.ArrayList;
+
+public class PlayerActivity extends AppCompatActivity {
+
+    Button btnplay , btnnext , btnprev , btnff, btnfr;
+    TextView txtsname, txtsstart, txtsstop;
+    SeekBar seekmusic;
+    ImageView imageView;
+
+    String sname;
+    public static final String EXTRA_NAME = "song_name";
+    static MediaPlayer mediaPlayer;
+    int position;
+    ArrayList<File> mySongs;
+    Thread updateseekbar;
+
+    @Override
+    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+        if (item.getItemId() == android.R.id.home){
+            onBackPressed();
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+
+    @SuppressLint("MissingInflatedId")
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_player);
+
+
+        getSupportActionBar().setTitle("Now Playing");
+        getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+        getSupportActionBar().setDisplayShowHomeEnabled(true);
+
+        btnprev = findViewById(R.id.btnprev);
+        btnnext = findViewById(R.id.btnnext);
+        btnplay = findViewById(R.id.playbtn);
+        btnff = findViewById(R.id.btnff);
+        btnfr = findViewById(R.id.btnfr);
+        txtsname = findViewById(R.id.txtsn);
+        txtsstart = findViewById(R.id.txtsstart);
+        txtsstop = findViewById(R.id.txtsstop);
+        seekmusic = findViewById(R.id.seekbar);
+        imageView = findViewById(R.id.imageview);
+
+        if (mediaPlayer != null){
+            mediaPlayer.stop();
+            mediaPlayer.release();
+        }
+
+        Intent i =getIntent();
+        Bundle bundle = i.getExtras();
+
+        mySongs = (ArrayList) bundle.getParcelableArrayList("songs");
+        String songName = i.getStringExtra("songname");
+        position = bundle.getInt("pos",0);
+        txtsname.setSelected(true);
+        Uri uri = Uri.parse(mySongs.get(position).toString());
+        sname = mySongs.get(position).getName();
+        txtsname.setText(sname);
+
+        mediaPlayer = MediaPlayer.create(getApplicationContext(), uri);
+        mediaPlayer.start();
+
+        updateseekbar = new Thread(){
+            @Override
+            public void run() {
+                int totalDuration = mediaPlayer.getDuration();
+                int currentposition = 0;
+
+                while(currentposition<totalDuration){
+                    try {
+                        sleep(500);
+                        currentposition = mediaPlayer.getCurrentPosition();
+                        seekmusic.setProgress(currentposition);
+                    }
+                    catch (InterruptedException | IllegalStateException e){
+                        e.printStackTrace();
+                    }
+                }
+            }
+        };
+
+        seekmusic.setMax(mediaPlayer.getDuration());
+        updateseekbar.start();
+        seekmusic.getProgressDrawable().setColorFilter(getResources().getColor(R.color.purple_200), PorterDuff.Mode.MULTIPLY);
+        seekmusic.getThumb().setColorFilter(getResources().getColor(R.color.purple_200),PorterDuff.Mode.SRC_IN);
+
+        seekmusic.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int i, boolean b) {
+
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                mediaPlayer.seekTo(seekBar.getProgress());
+            }
+        });
+
+        String endTime = creatTime(mediaPlayer.getDuration());
+        txtsstop.setText(endTime);
+
+        final Handler handler = new Handler();
+        final int delay = 1000;
+
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                String currentTime = creatTime(mediaPlayer.getCurrentPosition());
+                txtsstart.setText(currentTime);
+                handler.postDelayed(this,delay);
+            }
+        },delay);
+
+        btnplay.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if(mediaPlayer.isPlaying()){
+                    btnplay.setBackgroundResource(R.drawable.ic_play);
+                    mediaPlayer.pause();
+                }
+                else {
+                    btnplay.setBackgroundResource(R.drawable.ic_pause);
+                    mediaPlayer.start();
+                }
+            }
+        });
+
+        //next listener
+        mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+            @Override
+            public void onCompletion(MediaPlayer mediaPlayer) {
+                btnnext.performClick();
+            }
+        });
+
+        btnnext.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                mediaPlayer.stop();
+                mediaPlayer.release();
+                position=((position+1)% mySongs.size());
+                Uri u = Uri.parse(mySongs.get(position).toString());
+                mediaPlayer = MediaPlayer.create(getApplicationContext(), u);
+                sname = mySongs.get(position).getName();
+                txtsname.setText(sname);
+                mediaPlayer.start();
+                btnplay.setBackgroundResource(R.drawable.ic_pause);
+                startAnimation(imageView);
+            }
+        });
+
+
+        btnprev.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                mediaPlayer.stop();
+                mediaPlayer.release();
+                position = ((position-1)<0)?(mySongs.size()-1):(position-1);
+
+                Uri u = Uri.parse(mySongs.get(position).toString());
+                mediaPlayer = MediaPlayer.create(getApplicationContext(),u);
+                sname = mySongs.get(position).getName();
+                txtsname.setText(sname);
+                mediaPlayer.start();
+                btnplay.setBackgroundResource(R.drawable.ic_pause);
+                startAnimation(imageView);
+            }
+        });
+
+        btnff.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (mediaPlayer.isPlaying()){
+                    mediaPlayer.seekTo(mediaPlayer.getCurrentPosition()+10000);
+                }
+            }
+        });
+
+
+        btnfr.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (mediaPlayer.isPlaying()){
+                    mediaPlayer.seekTo(mediaPlayer.getCurrentPosition()-10000);
+                }
+            }
+        });
+    }
+
+
+    public void startAnimation(View view){
+        ObjectAnimator animator = ObjectAnimator.ofFloat(imageView, "rotation" , 0f,360f);
+        animator.setDuration(1000);
+        AnimatorSet animatorSet = new AnimatorSet();
+        animatorSet.playTogether(animator);
+        animatorSet.start();
+    }
+
+
+    public String creatTime(int duration){
+        String time = "";
+        int min = duration/1000/60;
+        int sec = duration/1000%60;
+
+
+        time+=min+":";
+
+        if (sec<10){
+            time+="0";
+        }
+
+        time+=sec;
+        return time;
+    }
+}
+
+
+
+**activity_player.xml**
 
 
 <?xml version="1.0" encoding="utf-8"?>
@@ -344,3 +603,76 @@ public class MainActivity extends AppCompatActivity {
     </LinearLayout>
 
 </androidx.appcompat.widget.LinearLayoutCompat>
+
+
+
+
+
+**list_item.xml**
+//make an xml in layout folder of res in android project
+//making this xml file in order to design the list items
+
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="8dp"
+    android:layout_marginTop="8dp"
+    android:layout_marginEnd="8dp">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="34dp"
+        android:background="@drawable/list_bg"
+        android:padding="8dp">
+
+        <ImageView
+            android:id="@+id/imgsong"
+            android:layout_width="37dp"
+            android:layout_height="26dp"
+            android:layout_alignParentStart="true"
+            android:layout_alignParentTop="true"
+            android:layout_marginStart="0dp"
+            android:layout_marginTop="0dp"
+            android:background="@drawable/list_bg"
+            android:src="@drawable/ic_music"></ImageView>
+
+        <TextView
+            android:id="@+id/txtsongname"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_alignParentEnd="true"
+            android:layout_marginStart="5dp"
+            android:layout_marginEnd="5dp"
+            android:layout_toEndOf="@id/imgsong"
+            android:ellipsize="marquee"
+            android:marqueeRepeatLimit="marquee_forever"
+            android:padding="6dp"
+            android:scrollHorizontally="true"
+            android:singleLine="true"
+            android:text="Song Name"
+            android:textColor="@color/white"
+            android:textSize="15sp">
+
+        </TextView>
+    </RelativeLayout>
+
+
+
+</androidx.cardview.widget.CardView>
+
+
+
+**list_bg.xml**
+//make another xml file in order to make a background for the list
+
+
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/black"></solid>
+    <stroke android:width="1dp"
+        android:color="#FF362E"></stroke>
+
+
+</shape>
